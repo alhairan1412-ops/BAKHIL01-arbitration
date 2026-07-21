@@ -668,9 +668,16 @@
         border-right: 4px solid var(--uqu-gold);
       }
 
-      fieldset.missing {
+      fieldset.missing,
+      .field.missing input {
         border-color: #b91c1c;
         box-shadow: 0 0 0 3px rgba(185, 28, 28, .12);
+      }
+
+      .item-row.missing,
+      .compact-item.missing {
+        outline: 2px solid rgba(185, 28, 28, .42);
+        box-shadow: 0 14px 34px rgba(185, 28, 28, .12);
       }
 
       .note-field {
@@ -1091,7 +1098,7 @@
         <span>الباحث: أنس بن صالح باخيل</span>
         <span>79 عبارة للتحكيم</span>
         <span>13 بعدًا مبدئيًا</span>
-        <span>1447هـ / 2026م</span>
+        <span>1448هـ / 2026م</span>
       </div>
     </header>
 
@@ -5685,37 +5692,37 @@
               
             <label class="field">
               <span>الاسم</span>
-              <input type="text" name="judge_name" autocomplete="off">
+              <input type="text" name="judge_name" autocomplete="off" required>
             </label>
             
             <label class="field">
               <span>المرتبة العلمية</span>
-              <input type="text" name="judge_rank" autocomplete="off">
+              <input type="text" name="judge_rank" autocomplete="off" required>
             </label>
             
             <label class="field">
               <span>الجامعة</span>
-              <input type="text" name="judge_university" autocomplete="off">
+              <input type="text" name="judge_university" autocomplete="off" required>
             </label>
             
             <label class="field">
               <span>الكلية</span>
-              <input type="text" name="judge_college" autocomplete="off">
+              <input type="text" name="judge_college" autocomplete="off" required>
             </label>
             
             <label class="field">
               <span>القسم</span>
-              <input type="text" name="judge_department" autocomplete="off">
+              <input type="text" name="judge_department" autocomplete="off" required>
             </label>
             
             <label class="field">
               <span>التخصص الدقيق</span>
-              <input type="text" name="judge_specialty" autocomplete="off">
+              <input type="text" name="judge_specialty" autocomplete="off" required>
             </label>
             
             <label class="field">
               <span>البريد الإلكتروني</span>
-              <input type="email" name="judge_email" autocomplete="off">
+              <input type="email" name="judge_email" autocomplete="off" required>
             </label>
             
             <label class="field">
@@ -5751,7 +5758,7 @@
       const saveState = document.querySelector('.save-state');
       const thanksModal = document.querySelector('#thanks-modal');
       const storageKey = 'uqu_arbitration_draft_v3';
-      const GOOGLE_SHEETS_ENDPOINT = 'https://script.google.com/macros/s/AKfycby8miaEtTM-Pn8kaD9pctoRtit3Zhqpj8ioXN2TNne03_YhoA-sSTAVTEJcx97RRu-p2w/exec';
+      const GOOGLE_SHEETS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxRvZjHT1b2NugBx0NoMEOOrmoJa7m0AtwQkk32cg8x3UZy8UTdUGyx_NmWYbxBGt9V4Q/exec';
       let activeIndex = 0;
       if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
@@ -6030,18 +6037,25 @@
         });
       }
 
+      async function postViaFetch(endpoint, jsonPayload) {
+        await fetch(endpoint, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: jsonPayload,
+          keepalive: true,
+        });
+      }
+
       async function postToGoogleSheets(endpoint, payload) {
         const jsonPayload = JSON.stringify(payload);
-        try {
-          await postViaHiddenForm(endpoint, jsonPayload);
-        } catch {
-          await fetch(endpoint, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: jsonPayload,
-            keepalive: true,
-          });
+        const attempts = await Promise.allSettled([
+          postViaFetch(endpoint, jsonPayload),
+          postViaHiddenForm(endpoint, jsonPayload),
+        ]);
+
+        if (attempts.every((attempt) => attempt.status === 'rejected')) {
+          throw attempts[0].reason || new Error('Google Sheets submission failed.');
         }
       }
 
@@ -6154,6 +6168,21 @@
         saveDraft();
       }
 
+      function revealMissing(target, message, focusElement = null) {
+        const focusTarget = focusElement || target.querySelector('input, textarea, select, button');
+        const top = Math.max(0, target.getBoundingClientRect().top + window.scrollY - 90);
+
+        target.classList.add('missing');
+        window.scrollTo({ top, left: 0, behavior: 'smooth' });
+
+        if (focusTarget && typeof focusTarget.focus === 'function') {
+          setTimeout(() => focusTarget.focus({ preventScroll: true }), 260);
+        }
+
+        setTimeout(() => alert(message), 180);
+        setTimeout(() => target.classList.remove('missing'), 3800);
+      }
+
       function validateScalePanel(panel, showMessage = true) {
         const missingFieldset = Array
           .from(panel.querySelectorAll('fieldset'))
@@ -6162,10 +6191,31 @@
         if (!missingFieldset) return true;
 
         if (showMessage) {
+          const missingItem = missingFieldset.closest('.item-row') || missingFieldset;
+          const firstRadio = missingFieldset.querySelector('input[type="radio"]');
+
           missingFieldset.classList.add('missing');
-          missingFieldset.scrollIntoView({ behavior: 'smooth', block: 'center' });
           setTimeout(() => missingFieldset.classList.remove('missing'), 3200);
-          alert('يرجى اختيار وضوح العبارة والانتماء للبعد لكل عبارة قبل الانتقال.');
+          revealMissing(missingItem, 'يرجى استكمال تحكيم العبارة المحددة قبل الانتقال.', firstRadio);
+        }
+
+        return false;
+      }
+
+      function validateJudgePanel(showMessage = true) {
+        const judgePanel = document.querySelector('#judge-data');
+        const missingInput = Array
+          .from(judgePanel.querySelectorAll('input[required], textarea[required], select[required]'))
+          .find((input) => !input.checkValidity());
+
+        if (!missingInput) return true;
+
+        if (showMessage) {
+          const field = missingInput.closest('.field') || missingInput;
+          const message = missingInput.validity.typeMismatch
+            ? 'يرجى التأكد من صحة البريد الإلكتروني قبل إرسال التحكيم.'
+            : 'يرجى استكمال بيانات المحكّم قبل إرسال التحكيم. التوقيع اختياري.';
+          revealMissing(field, message, missingInput);
         }
 
         return false;
@@ -6221,6 +6271,7 @@
         if (target.dataset.stepAction === 'next') {
           if (activePanel().classList.contains('judge-panel')) {
             if (!validateAllScalePanels()) return;
+            if (!validateJudgePanel()) return;
             saveDraft();
             submitResponses();
           } else {
