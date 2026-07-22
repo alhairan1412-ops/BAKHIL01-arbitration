@@ -6047,10 +6047,24 @@
         });
       }
 
+      function postViaBeacon(endpoint, jsonPayload) {
+        return new Promise((resolve, reject) => {
+          if (!navigator.sendBeacon) {
+            reject(new Error('sendBeacon is not supported.'));
+            return;
+          }
+
+          const body = new Blob([jsonPayload], { type: 'text/plain;charset=utf-8' });
+          const queued = navigator.sendBeacon(endpoint, body);
+          queued ? resolve() : reject(new Error('sendBeacon was not queued.'));
+        });
+      }
+
       async function postToGoogleSheets(endpoint, payload) {
         const jsonPayload = JSON.stringify(payload);
         const attempts = await Promise.allSettled([
           postViaFetch(endpoint, jsonPayload),
+          postViaBeacon(endpoint, jsonPayload),
           postViaHiddenForm(endpoint, jsonPayload),
         ]);
 
