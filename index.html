@@ -5974,7 +5974,7 @@
         return {
           submission_id: submissionId,
           submitted_at: submittedAt,
-          source: 'netlify-form-post',
+          source: 'github-pages-direct-form',
           judge,
           item_responses: itemResponses,
           suggestions,
@@ -6073,6 +6073,24 @@
         }
       }
 
+      function submitViaTopLevelForm(endpoint, payload) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = endpoint;
+        form.target = '_self';
+        form.acceptCharset = 'UTF-8';
+        form.style.display = 'none';
+
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'payload';
+        input.value = JSON.stringify(payload);
+        form.appendChild(input);
+
+        document.body.appendChild(form);
+        form.submit();
+      }
+
       async function submitResponses() {
         saveDraft();
         const endpoint = GOOGLE_SHEETS_ENDPOINT.trim();
@@ -6082,9 +6100,9 @@
         }
 
         try {
-          await postToGoogleSheets(endpoint, buildSubmissionPayload());
+          const payload = buildSubmissionPayload();
           localStorage.removeItem(storageKey);
-          showThanksModal();
+          submitViaTopLevelForm(endpoint, payload);
         } catch {
           alert('تعذر الإرسال. سيتم تنزيل نسخة احتياطية من الردود.');
           exportCsv();
